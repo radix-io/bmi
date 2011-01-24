@@ -4,7 +4,6 @@
 #include <signal.h>
 
 #include "portals_conn.h"
-#include "portals_comm.h"
 #include "portals_helpers.h"
 
 #include "src/common/quicklist/quicklist.h"

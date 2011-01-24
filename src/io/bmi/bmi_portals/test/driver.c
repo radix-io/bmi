@@ -1,5 +1,4 @@
 #include "portals_conn.h"
-#include "portals_comm.h"
 #include "portals_helpers.h"
 #include <stdio.h>
 #include <pthread.h>

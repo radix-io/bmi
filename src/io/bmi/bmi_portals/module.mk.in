@@ -13,7 +13,7 @@ ifneq (,$(BUILD_PORTALS))
 # Local definitions.
 #
 DIR := src/io/bmi/bmi_portals
-cfiles := portals.c dlmalloc.c portals_comm.c portals_conn.c portals_fc.c portals_helpers.c portals_wrappers.c
+cfiles := portals.c dlmalloc.c portals_conn.c portals_helpers.c portals_wrappers.c
 
 #
 # Export these to the top Makefile to tell it what to build.

@@ -83,6 +83,8 @@ typedef struct bmip_portals_conn_op
 
 } bmip_portals_conn_op_t;
 
+int bmip_wait_event(int timeout, ptl_handle_eq_t * eq, ptl_event_t * ev);
+
 /* connection setup and shutdown */
 int bmip_init(int pid);
 int bmip_finalize(void);
