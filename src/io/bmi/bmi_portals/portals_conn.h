@@ -13,6 +13,14 @@
 #define BMIP_USE_CVTEST 0
 #define BMIP_USE_BARRIER 1
 
+#define BMIP_EX_SEND 1
+#define BMIP_UNEX_SEND 2
+#define BMIP_EX_RECV 3
+#define BMIP_UNEX_RECV 4
+
+#define BMIP_UNEX_SS_LOCK_FREE 10
+#define BMIP_UNEX_SS_LOCK_HELD 11
+
 #define BMIP_MAX_LISTIO 1025
 
 #define BMIP_EV_LIMIT 128
@@ -22,6 +30,7 @@ typedef struct bmip_seq
 	struct qlist_head list;
 	ptl_process_id_t target;
 	unsigned int counter;
+	char server;
 } bmip_seq_t;
 
 typedef struct bmip_pending_event
@@ -46,10 +55,12 @@ typedef struct bmip_portals_conn_op
 	/* tree data */
 	int32_t key;
 
+	size_t ev_alength;
+
 	/* op data */	
 	int8_t op_type;
-	const void ** buffers;
-	const void ** user_buffers;
+	void ** buffers;
+	void ** user_buffers;
 	size_t * lengths;
 	size_t * alengths;
 	size_t * offsets;
@@ -81,9 +92,23 @@ typedef struct bmip_portals_conn_op
         int get_remote_get_wait_counter;
         int unex_wait_counter;
 
-} bmip_portals_conn_op_t;
+	int cur_ss_counter;
+	int cur_ss_counter_limit;
+	size_t cur_ss_offset;
+	char ss_mode;
+	void * cur_ss_buffer;
+	size_t cur_ss_buffer_inc;
+	int put_remote_get_wait_counter;
 
-int bmip_wait_event(int timeout, ptl_handle_eq_t * eq, ptl_event_t * ev);
+	char * unex_buffer;
+	size_t unex_buffer_length;
+	ptl_match_bits_t unexmb;
+
+	/* trace events */
+	uint64_t csid;
+	uint64_t ptlid;
+
+} bmip_portals_conn_op_t;
 
 /* connection setup and shutdown */
 int bmip_init(int pid);
@@ -120,11 +145,17 @@ int bmip_server_get_cleanup(void * op_, int etype);
 int bmip_server_get_pending(void * op_, int etype);
 int bmip_server_get_init(void * op_, int etype, ptl_process_id_t op_pid);
 
+int bmip_server_post_unex_send(ptl_process_id_t target, int num, void * buffer, size_t length, int tag, void * user_ptr, int64_t comm_id);
+int bmip_server_unex_send_put_local_put_wait(void * op_, int etype);
+int bmip_server_unex_send_get_remote_get_wait(void * op_, int etype);
+int bmip_server_unex_send_put_remote_put(bmip_portals_conn_op_t * cur_op, int etype);
+int bmip_server_unex_send_cleanup(void * op_, int etype);
+
 void * bmip_server_monitor(void * args);
-bmip_context_t * bmip_server_post_recv(ptl_process_id_t target, int64_t match_bits, int num, void ** buffers, size_t * lengths, int use_barrier, void * user_ptr, int64_t comm_id);
+int bmip_server_post_recv(ptl_process_id_t target, int64_t match_bits, int num, void ** buffers, size_t * lengths, int use_barrier, void * user_ptr, int64_t comm_id);
 void bmip_server_wait_recv(bmip_context_t * context);
 
-bmip_context_t * bmip_server_post_send(ptl_process_id_t target, int64_t match_bits, int num, const void ** buffers, size_t * lengths, int use_barrier, void * user_ptr, int64_t comm_id);
+int bmip_server_post_send(ptl_process_id_t target, int64_t match_bits, int num, void ** buffers, size_t * lengths, int use_barrier, void * user_ptr, int64_t comm_id);
 void bmip_server_wait_send(bmip_context_t * context);
 
 void * bmip_new_malloc(size_t len);
@@ -149,4 +180,20 @@ int bmip_server_test_event_id(int ms_timeout, int nums, void ** user_ptrs, size_
 
 int bmip_is_local_addr(ptl_process_id_t pid);
 ptl_process_id_t bmip_get_ptl_id(void);
+
+void bmip_allocate_client_mem(void);
+void bmip_allocate_server_mem(void);
+void bmip_free_client_mem(void);
+void bmip_free_server_mem(void);
+
+int bmip_server_to_server_put_local_put_wait(void * op_, int etype);
+int bmip_server_to_server_put_remote_get_wait(void * op_, int etype);
+int bmip_server_to_server_put_remote_put_wait(void * op_, int etype);
+
+int bmip_server_to_server_send(void * op, int etype);
+int bmip_server_to_server_send_2(void * op, int etype);
+int bmip_server_to_server_send_3(void * op, int etype);
+int bmip_server_to_server_send_4(void * op, int etype);
+int bmip_server_to_server_send_5_cleanup(void * op, int etype);
+int bmip_server_unex_start_op(void * op_, int etype);
 #endif

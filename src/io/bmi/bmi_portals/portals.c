@@ -4,13 +4,16 @@
 #include <signal.h>
 
 #include "portals_conn.h"
+#include "portals_comm.h"
 #include "portals_helpers.h"
+#include "portals_trace.h"
 
 #include "src/common/quicklist/quicklist.h"
 #include "src/common/gen-locks/gen-locks.h"
 #include "src/common/id-generator/id-generator.h"
 #include "src/io/bmi/bmi.h"
 #include "src/io/bmi/bmi-method-support.h"
+#include "src/io/bmi/bmi-method-callback.h"
 
 /* bmi mode */
 #define CLIENT 0
@@ -87,6 +90,30 @@ typedef struct portals_addr
 static int bmip_is_clone = 0;
 pthread_barrier_t bmip_comm_bar;
 pthread_barrierattr_t bmi_comm_bar_attr;
+
+static void * bmiptl_safe_malloc(size_t size, char * fl, char * fn, int l)
+{
+        void * m = NULL;
+
+        m = malloc(size);
+        if(!m)
+        {
+                fprintf(stderr, "%s:%i malloc failed. size = %lu\n", __func__, __LINE__, size);
+                assert(m != NULL);
+        }
+
+        return m;
+}
+
+static void bmiptl_safe_free(void * m, char * fl, char * fn, int l)
+{
+        if(!m)
+        {
+                fprintf(stderr, "%s:%i free failed. NULL buffer detected\n", __func__, __LINE__);
+                assert(m != NULL);
+        }
+        free(m);
+}
 
 int bmip_comm_barrier_init(void)
 {
@@ -196,6 +223,16 @@ BMI_portals_initialize(bmi_method_addr_p listen_addr, int method_id,
 	portals_node_type = (init_flags & BMI_INIT_SERVER) ? SERVER : CLIENT;
 	portals_method_id = method_id;
 
+	/* dynamically allocate the correct mem */
+	if(portals_node_type == SERVER)
+	{
+		bmip_allocate_server_mem();
+	}
+	else if(portals_node_type == CLIENT)
+	{
+		bmip_allocate_client_mem();
+	}
+	
 	if(portals_node_type == SERVER || (!client_clone_mode && portals_node_type == CLIENT) )
 	{
 		/* if we have the addr */
@@ -227,15 +264,9 @@ BMI_portals_initialize(bmi_method_addr_p listen_addr, int method_id,
 	{
 		bmip_comm_barrier_init();
 #ifdef BMIP_CLONE
-		//client_clone_pid = clone(bmip_client_clone_init, clone_stack_top, CLONE_THREAD|CLONE_FILES|CLONE_SIGHAND|CLONE_VM, listen_addr);
 		client_clone_pid = clone(bmip_client_clone_init, clone_stack_top, CLONE_THREAD|CLONE_SIGHAND|CLONE_VM, listen_addr);
 		bmip_comm_barrier();
 #endif
-	}
-
-	if(portals_node_type == SERVER || (!client_clone_mode && portals_node_type == CLIENT))
-	{
-		fprintf(stderr, "%s:%i nid = %i pid = %i\n", __func__, __LINE__, bmip_get_ptl_nid(), bmip_get_ptl_pid());
 	}
 
 	return 0;
@@ -245,6 +276,7 @@ BMI_portals_initialize(bmi_method_addr_p listen_addr, int method_id,
 static int
 BMI_portals_finalize(void)
 {
+	bmip_trace_dump_list();
 	if(portals_node_type == SERVER)
 	{
 		bmip_dest_eqs();
@@ -287,15 +319,9 @@ BMI_portals_set_info(int option, void* inout_parameter)
 			bmi_method_addr_p addr = (bmi_method_addr_p)inout_parameter;
 			portals_addr_t * a = (portals_addr_t *)addr->method_data;
 
-			fprintf(stderr, "%s:%i drop portals addr = %s\n", __func__, __LINE__, a->hostname);
-
 			/* remove from the list */
 			qlist_del(&a->list);
 			gen_mutex_unlock(&addr_lock);
-
-			/* cleanup */
-			//free(a->hostname);
-			//free(a);
 
 			break;
 		}
@@ -344,7 +370,7 @@ BMI_portals_memalloc(bmi_size_t size, enum bmi_op_type send_recv)
 	}
 	else
 	{
-		return malloc(size);
+		return bmiptl_safe_malloc(size, __FILE__, __func__, __LINE__);
 	}
 	return NULL;
 }
@@ -360,7 +386,7 @@ BMI_portals_memfree(void* buffer, bmi_size_t size, enum bmi_op_type send_recv)
 	}
 	else
 	{
-		free(buffer);
+		bmiptl_safe_free(buffer, __FILE__, __func__, __LINE__);
 	}
 	return ret;
 }
@@ -369,7 +395,7 @@ BMI_portals_memfree(void* buffer, bmi_size_t size, enum bmi_op_type send_recv)
 static int
 BMI_portals_unexpected_free(void* buffer)
 {
-	free(buffer);
+	bmiptl_safe_free(buffer, __FILE__, __func__, __LINE__);
 
 	return 0;
 }
@@ -390,7 +416,7 @@ BMI_portals_post_send(bmi_op_id_t* id, bmi_method_addr_p dest,
     		mop->context_id = context_id;
 		*id = mop->op_id;
 
-		bmip_server_post_send(((portals_addr_t *)dest->method_data)->pid, (int64_t)tag, 1, &buffer, (size_t *)&size, BMIP_USE_CVTEST, user_ptr, *id);
+		bmip_server_post_send(((portals_addr_t *)dest->method_data)->pid, (int64_t)tag, 1, (void **)&buffer, (size_t *)&size, BMIP_USE_CVTEST, user_ptr, *id);
 		return 0;
 	}
 	else
@@ -441,6 +467,18 @@ BMI_portals_post_sendunexpected(bmi_op_id_t* id, bmi_method_addr_p dest,
 
 		return bmip_delegate_ret;
 	}
+	else
+	{
+		method_op_p mop = bmi_alloc_method_op(0);
+    		mop->addr = dest;
+    		mop->method_data = NULL;
+    		mop->user_ptr = user_ptr;
+    		mop->context_id = context_id;
+		*id = mop->op_id;
+
+		return bmip_server_post_unex_send(((portals_addr_t *)dest->method_data)->pid,
+				1, buffer, size, tag, user_ptr, *id);
+	}
 	return -1;
 }
 
@@ -459,6 +497,7 @@ BMI_portals_post_recv(bmi_op_id_t* id, bmi_method_addr_p src, void* buffer,
 		   void* user_ptr, bmi_context_id context_id, PVFS_hint hints)
 {
 	int ret = 0;
+
 	if(portals_node_type == SERVER)
 	{
 		method_op_p mop = bmi_alloc_method_op(0);
@@ -508,7 +547,7 @@ BMI_portals_test(bmi_op_id_t id, int* outcount, bmi_error_code_t* error_code,
 	if(portals_node_type == SERVER)
 	{
 		method_op_p op = (method_op_p)id_gen_fast_lookup(id);
-		*outcount = bmip_server_test_event_id(max_idle_time_ms, 1, user_ptr, actual_size, id);
+		*outcount = bmip_server_test_event_id(max_idle_time_ms, 1, user_ptr, (size_t *)actual_size, id);
 		*error_code = 0;
 
 		if(*outcount > 0)
@@ -549,8 +588,8 @@ BMI_portals_testcontext(int incount, bmi_op_id_t* out_id_array, int* outcount,
 {
 	if(portals_node_type == SERVER)
 	{
-		int64_t * opids = (int64_t *)malloc(sizeof(int64_t) * incount);
-		size_t * sizes = (size_t *)malloc(sizeof(size_t) * incount);
+		int64_t * opids = (int64_t *)bmiptl_safe_malloc(sizeof(int64_t) * incount, __FILE__, __func__, __LINE__);
+		size_t * sizes = (size_t *)bmiptl_safe_malloc(sizeof(size_t) * incount, __FILE__, __func__, __LINE__);
 
 		*outcount = bmip_server_test_events(max_idle_time_ms, incount, user_ptr_array, sizes, opids);
 
@@ -571,8 +610,8 @@ BMI_portals_testcontext(int incount, bmi_op_id_t* out_id_array, int* outcount,
 			}
 		}
 
-		free(opids);
-		free(sizes);
+		bmiptl_safe_free(opids, __FILE__, __func__, __LINE__);
+		bmiptl_safe_free(sizes, __FILE__, __func__, __LINE__);
 
 		return 0;
 	}
@@ -652,10 +691,10 @@ BMI_portals_testunexpected(int incount, int* outcount,
 	{
 		int i = 0;
 		/* TODO make these global per server... prevent alloc / dealloc */
-		void ** buffers = (void **)malloc(sizeof(void *) * incount);
-		size_t * sizes = (size_t *)malloc(sizeof(size_t) * incount);
-		int64_t * tags = (int64_t *)malloc(sizeof(int64_t) * incount);
-		ptl_process_id_t * addrs = (ptl_process_id_t *)malloc(sizeof(ptl_process_id_t) * incount);
+		void ** buffers = (void **)bmiptl_safe_malloc(sizeof(void *) * incount, __FILE__, __func__, __LINE__);
+		size_t * sizes = (size_t *)bmiptl_safe_malloc(sizeof(size_t) * incount, __FILE__, __func__, __LINE__);
+		int64_t * tags = (int64_t *)bmiptl_safe_malloc(sizeof(int64_t) * incount, __FILE__, __func__, __LINE__);
+		ptl_process_id_t * addrs = (ptl_process_id_t *)bmiptl_safe_malloc(sizeof(ptl_process_id_t) * incount, __FILE__, __func__, __LINE__);
 
 		*outcount = bmip_server_test_unex_events(max_idle_time_ms, incount, buffers, sizes, tags, addrs);
 
@@ -671,10 +710,10 @@ BMI_portals_testunexpected(int incount, int* outcount,
 
 		/* TODO make these global per server... prevent alloc / dealloc */
 		/* cleanup */
-		free(buffers);
-		free(sizes);
-		free(tags);
-		free(addrs);
+		bmiptl_safe_free(buffers, __FILE__, __func__, __LINE__);
+		bmiptl_safe_free(sizes, __FILE__, __func__, __LINE__);
+		bmiptl_safe_free(tags, __FILE__, __func__, __LINE__);
+		bmiptl_safe_free(addrs, __FILE__, __func__, __LINE__);
 
 		return 0;
 	}
@@ -710,6 +749,7 @@ BMI_portals_method_addr_lookup(const char * id)
 		if(strcmp(id, a->hostname) == 0)
 		{
 			found = 1;
+			addr = a->p_addr; /* store the address */
 			break;
 		}
 	}
@@ -746,10 +786,6 @@ BMI_portals_method_addr_lookup(const char * id)
 		/* add it to the list */
 		qlist_add_tail(&((portals_addr_t *)addr->method_data)->list, &bmip_addr_list);
 	}
-	else
-	{
-		fprintf(stderr, "%s:%i not found\n", __func__, __LINE__);
-	}
 	gen_mutex_unlock(&addr_lock);
 
 	return addr;
@@ -769,7 +805,7 @@ BMI_portals_post_send_list(bmi_op_id_t* id, bmi_method_addr_p dest,
 	{
 		method_op_p mop = bmi_alloc_method_op(0);
 		*id = mop->op_id;
-		bmip_server_post_send(((portals_addr_t *)dest->method_data)->pid, (int64_t)tag, list_count, (const void **)buffer_list, (size_t *)size_list, BMIP_USE_CVTEST, user_ptr, *id);
+		bmip_server_post_send(((portals_addr_t *)dest->method_data)->pid, (int64_t)tag, list_count, (void **)buffer_list, (size_t *)size_list, BMIP_USE_CVTEST, user_ptr, *id);
 		return 0;
 	}
 	else

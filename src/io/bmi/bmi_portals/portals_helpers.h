@@ -22,4 +22,7 @@ const char *PtlEventKindStr(ptl_event_kind_t ev_kind);
 int bmip_get_time(struct timespec * timeval);
 
 double bmip_elapsed_time(struct timespec * t1, struct timespec * t2);
+
+int binbuffer_to_text(void * buffer, char * buf, int size);
+
 #endif /* PORTALS_HELPERS_H */
