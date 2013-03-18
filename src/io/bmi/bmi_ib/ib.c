@@ -1411,6 +1411,8 @@ restart:
 	}
     }
 
+    ib_tcp_server_check_new_connections();
+
     *outcount = n;
     return activity + n;
 }
