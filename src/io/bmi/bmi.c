@@ -1428,6 +1428,34 @@ int BMI_get_info(BMI_addr_t addr,
         }
         break;
 
+    case BMI_QUERY_TRANSPORT_METHOD:
+        {
+            int i = 0;
+            int kmc = sizeof(static_methods) / sizeof(static_methods[0]) - 1;
+            int length = strlen("bmi_") + strlen((char*) inout_parameter) + 1;
+            char *method = malloc(length);
+
+            if (method == NULL)
+            {
+                return -1;
+            }
+
+            memset(method, 0, length);
+            strcpy(method, "bmi_");
+            strcat(method, (char*) inout_parameter);
+
+            for (i = 0; i < kmc; ++i)
+            {
+                if (strcmp(static_methods[i]->method_name, method) == 0)
+                {
+                    free(method);
+                    return 1;
+                }
+            }
+
+            free(method);
+        }
+        break;
     default:
 	return (bmi_errno_to_pvfs(-ENOSYS));
     }
