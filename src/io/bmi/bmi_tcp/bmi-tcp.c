@@ -568,6 +568,9 @@ int BMI_tcp_finalize(void)
         tcp_socket_collection_p = NULL;
     }
 
+    /* free hash table storing method addresses */
+    qhash_finalize(addr_hash_table);
+
     /* NOTE: we are trusting the calling BMI layer to deallocate 
      * all of the method addresses (this will close any open sockets)
      */

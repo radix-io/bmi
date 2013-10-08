@@ -7,8 +7,10 @@
 #ifndef __PINT_MEM_H
 #define __PINT_MEM_H
 
-extern void* PINT_mem_aligned_alloc(size_t size, size_t alignment);
-extern void PINT_mem_aligned_free(void *ptr);
+#include <stddef.h>
+
+void* PINT_mem_aligned_alloc(size_t size, size_t alignment);
+void PINT_mem_aligned_free(void *ptr);
 
 #endif /* __PINT_MEM_H */
 

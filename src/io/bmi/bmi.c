@@ -529,6 +529,10 @@ int BMI_finalize(void)
     }
     gen_mutex_unlock(&bmi_initialize_mutex);
 
+    /* destroy the reference list */
+    /* (side effect: destroys all method addresses as well) */
+//    ref_list_cleanup(cur_ref_list);
+
     gen_mutex_lock(&active_method_count_mutex);
     /* attempt to shut down active methods */
     for (i = 0; i < active_method_count; i++)
@@ -547,10 +551,6 @@ int BMI_finalize(void)
 
     if (unexpected_method_usage)
        free(unexpected_method_usage);
-
-    /* destroy the reference list */
-    /* (side effect: destroys all method addresses as well) */
-    ref_list_cleanup(cur_ref_list);
 
     /* shut down id generator */
     id_gen_safe_finalize();
