@@ -224,8 +224,8 @@ static int ib_check_cq(void)
 		struct ib_work *rq = sq;  /* rename */
 		rq_state_t state = rq->state.recv;
 		
-		if (state & RQ_RTS_WAITING_CTS_SEND_COMPLETION)
-		    rq->state.recv &= ~RQ_RTS_WAITING_CTS_SEND_COMPLETION;
+		if (state == RQ_RTS_WAITING_CTS_SEND_COMPLETION)
+		    rq->state.recv = RQ_RTS_WAITING_RTS_DONE;
 		else if (state == RQ_CANCELLED)
 		    ;
 		else
@@ -589,11 +589,8 @@ encourage_recv_incoming(struct buf_head *bh, msg_type_t type, u_int32_t byte_len
 	if (rq->state.recv == RQ_RTS_WAITING_CTS_BUFFER) {
 	    int ret;
 	    ret = send_cts(rq);
-	    if (ret == 0) {
-		rq->state.recv = RQ_RTS_WAITING_RTS_DONE |
-                    RQ_RTS_WAITING_CTS_SEND_COMPLETION |
-                    RQ_RTS_WAITING_USER_TEST;
-            }
+	    if (ret == 0)
+		rq->state.recv = RQ_RTS_WAITING_CTS_SEND_COMPLETION;
 	    /* else keep waiting until we can send that cts */
 	}
 
@@ -611,7 +608,7 @@ encourage_recv_incoming(struct buf_head *bh, msg_type_t type, u_int32_t byte_len
 	rq = NULL;
 	qlist_for_each_entry(rqt, &ib_device->recvq, list) {
 	    if (rqt->c == c && rqt->rts_mop_id == mh_rts_done.mop_id &&
-		rqt->state.recv & RQ_RTS_WAITING_RTS_DONE) {
+		rqt->state.recv == RQ_RTS_WAITING_RTS_DONE) {
 		rq = rqt;
 		break;
 	    }
@@ -629,7 +626,7 @@ encourage_recv_incoming(struct buf_head *bh, msg_type_t type, u_int32_t byte_len
 
 	post_rr(c, bh);
 
-        rq->state.recv &= ~RQ_RTS_WAITING_RTS_DONE;
+	rq->state.recv = RQ_RTS_WAITING_USER_TEST;
 
     } else if (type == MSG_BYE) {
 	/*
@@ -1035,11 +1032,8 @@ post_recv(bmi_op_id_t *id, struct bmi_method_addr *remote_map,
 	memcache_register(ib_device->memcache, &rq->buflist);
 #endif
 	sret = send_cts(rq);
-	if (sret == 0) {
-            rq->state.recv = RQ_RTS_WAITING_RTS_DONE |
-                RQ_RTS_WAITING_CTS_SEND_COMPLETION |
-                RQ_RTS_WAITING_USER_TEST;
-        }
+	if (sret == 0)
+	    rq->state.recv = RQ_RTS_WAITING_CTS_SEND_COMPLETION;
 	goto out;
     }
 
@@ -1173,11 +1167,9 @@ test_rq(struct ib_work *rq, bmi_op_id_t *outid, bmi_error_code_t *err,
 	debug(2, "%s: rq %p %s, encouraging", __func__, rq,
 	  rq_state_name(rq->state.recv));
 	ret = send_cts(rq);
-	if (ret == 0) {
-            rq->state.recv = RQ_RTS_WAITING_RTS_DONE |
-                RQ_RTS_WAITING_CTS_SEND_COMPLETION |
-                RQ_RTS_WAITING_USER_TEST;
-        } /* else keep waiting until we can send that cts */
+	if (ret == 0)
+	    rq->state.recv = RQ_RTS_WAITING_CTS_SEND_COMPLETION;
+	/* else keep waiting until we can send that cts */
 	debug(2, "%s: rq %p now %s", __func__, rq, rq_state_name(rq->state.recv));
     } else if (rq->state.recv == RQ_CANCELLED && complete) {
 	debug(2, "%s: rq %p cancelled", __func__, rq);
@@ -1493,10 +1485,12 @@ BMI_ib_cancel(bmi_op_id_t id, bmi_context_id context_id __unused)
 	    struct ib_work *rq = qlist_upcast(l);
 	    if (rq->c != c) continue;
 #if !MEMCACHE_BOUNCEBUF
-	    if (rq->state.recv & RQ_RTS_WAITING_RTS_DONE)
+	    if (rq->state.recv == RQ_RTS_WAITING_RTS_DONE)
 		memcache_deregister(ib_device->memcache, &rq->buflist);
 #  if MEMCACHE_EARLY_REG
-            /* pin on post, dereg all these */
+	    /* pin on post, dereg all these */
+	    if (rq->state.recv == RQ_RTS_WAITING_CTS_SEND_COMPLETION)
+		memcache_deregister(ib_device->memcache, &rq->buflist);
 	    if (rq->state.recv == RQ_WAITING_INCOMING
 	      && rq->buflist.tot_len > ib_device->eager_buf_payload)
 		memcache_deregister(ib_device->memcache, &rq->buflist);
