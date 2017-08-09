@@ -171,6 +171,18 @@ int BMI_initialize(const char *method_list,
     char *proto = NULL;
     int addr_count = 0;
 
+    /* server must specify method list at startup, optional for client */
+    if (flags & BMI_INIT_SERVER) {
+	if (!listen_addr || !method_list)
+	    return bmi_errno_to_pvfs(-EINVAL);
+    } else {
+	if (listen_addr)
+	    return bmi_errno_to_pvfs(-EINVAL);
+	if (flags) {
+	    gossip_lerr("Warning: flags ignored on client.\n");
+	}
+    }
+
     gen_mutex_lock(&bmi_initialize_mutex);
     if(bmi_initialized_count > 0)
     {
@@ -184,22 +196,13 @@ int BMI_initialize(const char *method_list,
 
     global_flags = flags;
 
-    /* server must specify method list at startup, optional for client */
-    if (flags & BMI_INIT_SERVER) {
-	if (!listen_addr || !method_list)
-	    return bmi_errno_to_pvfs(-EINVAL);
-    } else {
-	if (listen_addr)
-	    return bmi_errno_to_pvfs(-EINVAL);
-	if (flags) {
-	    gossip_lerr("Warning: flags ignored on client.\n");
-	}
-    }
-
     /* make sure that id generator is initialized if not already */
     ret = id_gen_safe_initialize();
     if(ret < 0)
     {
+        gen_mutex_lock(&bmi_initialize_mutex);
+        --bmi_initialized_count;
+        gen_mutex_unlock(&bmi_initialize_mutex);
         return(ret);
     }
 
@@ -216,7 +219,12 @@ int BMI_initialize(const char *method_list,
     known_method_table = malloc(
 	known_method_count * sizeof(*known_method_table));
     if (!known_method_table)
+    {
+        gen_mutex_lock(&bmi_initialize_mutex);
+        --bmi_initialized_count;
+        gen_mutex_unlock(&bmi_initialize_mutex);
 	return bmi_errno_to_pvfs(-ENOMEM);
+    }
     memcpy(known_method_table, static_methods,
 	known_method_count * sizeof(*known_method_table));
 
@@ -305,6 +313,7 @@ int BMI_initialize(const char *method_list,
     if (cur_ref_list)
     {
 	ref_list_cleanup(cur_ref_list);
+        cur_ref_list = NULL;
     }
 
     gen_mutex_lock(&active_method_count_mutex);
@@ -349,6 +358,10 @@ int BMI_initialize(const char *method_list,
 
     /* shut down id generator */
     id_gen_safe_finalize();
+
+    gen_mutex_lock(&bmi_initialize_mutex);
+    --bmi_initialized_count;
+    gen_mutex_unlock(&bmi_initialize_mutex);
 
     return (ret);
 }
