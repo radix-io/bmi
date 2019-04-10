@@ -3094,13 +3094,18 @@ static int tcp_do_work_recv(bmi_method_addr_p map, int* stall_flag)
         if(new_header.src_addr_hash == 0)
         {
             /* client connection; there is no identifier in the header */
-            /* register this address with the method control layer */
-            tcp_addr_data->bmi_addr = bmi_method_addr_reg_callback(map);
-            if (ret < 0)
+            /* register this address with the method control layer if it has
+             * not been registered already
+             */
+            if(!tcp_addr_data->bmi_addr)
             {
-                tcp_shutdown_addr(map);
-                dealloc_tcp_method_addr(map);
-                return (ret);
+                tcp_addr_data->bmi_addr = bmi_method_addr_reg_callback(map);
+                if (ret < 0)
+                {
+                    tcp_shutdown_addr(map);
+                    dealloc_tcp_method_addr(map);
+                    return (ret);
+                }
             }
         }
         else
@@ -3129,13 +3134,18 @@ static int tcp_do_work_recv(bmi_method_addr_p map, int* stall_flag)
                 /* add entry to hash table so we can find it later */
                 qhash_add(addr_hash_table, &tcp_addr_data->addr_hash,
                     &tcp_addr_data->hash_link);
-                /* register this address with the method control layer */
-                tcp_addr_data->bmi_addr = bmi_method_addr_reg_callback(map);
-                if (ret < 0)
+                /* register this address with the method control layer if it has
+                 * not been registered already
+                 */
+                if(!tcp_addr_data->bmi_addr)
                 {
-                    tcp_shutdown_addr(map);
-                    dealloc_tcp_method_addr(map);
-                    return (ret);
+                    tcp_addr_data->bmi_addr = bmi_method_addr_reg_callback(map);
+                    if (ret < 0)
+                    {
+                        tcp_shutdown_addr(map);
+                        dealloc_tcp_method_addr(map);
+                        return (ret);
+                    }
                 }
             }
         }
