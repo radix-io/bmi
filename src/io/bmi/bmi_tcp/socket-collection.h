@@ -36,6 +36,7 @@ struct socket_collection
     struct qlist_head add_queue;
 
     int server_socket;
+    int server_port;
     int pipe_fd[2];
 };
 typedef struct socket_collection* socket_collection_p;

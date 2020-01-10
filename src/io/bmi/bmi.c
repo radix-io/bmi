@@ -1440,7 +1440,22 @@ int BMI_get_info(BMI_addr_t addr,
             return ret;
         }
         break;
-
+    case BMI_TCP_GET_PORT:
+	gen_mutex_lock(&active_method_count_mutex);
+        /* look through active methods for one that will answer this */
+	for (i = 0; i < active_method_count; i++)
+	{
+	    ret = active_method_table[i]->get_info(
+                option, inout_parameter);
+	    if (ret == 0)
+	    {
+	        gen_mutex_unlock(&active_method_count_mutex);
+		return (ret);
+	    }
+	}
+	gen_mutex_unlock(&active_method_count_mutex);
+        return ret;
+        break;
     case BMI_TRANSPORT_METHODS_STRING:
         {
             /*

@@ -56,6 +56,7 @@ socket_collection_p BMI_socket_collection_init(int new_server_socket)
     }
 
     memset(tmp_scp, 0, sizeof(struct socket_collection));
+    tmp_scp->server_port = -1;
 
     tmp_scp->epfd = epoll_create(EPOLL_CREATE_SIZE);
     if(tmp_scp->epfd < 0)
@@ -69,6 +70,9 @@ socket_collection_p BMI_socket_collection_init(int new_server_socket)
 
     if(new_server_socket > -1)
     {
+        struct sockaddr_in addr;
+        socklen_t addr_len = sizeof(addr);
+
         memset(&event, 0, sizeof(event));
         event.events = (EPOLLIN|EPOLLERR|EPOLLHUP);
         event.data.ptr = NULL;
@@ -79,6 +83,20 @@ socket_collection_p BMI_socket_collection_init(int new_server_socket)
             gossip_err("Error: epoll_ctl() failure: %s.\n", strerror(errno));
             free(tmp_scp);
             return(NULL);
+        }
+
+        /* determine what port the server socket is bound to, in case the
+         * port was auto-assigned
+         */
+        ret = getsockname(new_server_socket, (struct sockaddr *)&addr, &addr_len);
+        if(ret < 0)
+        {
+            /* shrug */
+            tmp_scp->server_port = 0;
+        }
+        else
+        {
+            tmp_scp->server_port = ntohs(addr.sin_port);
         }
     }
 

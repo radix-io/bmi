@@ -35,6 +35,7 @@ struct socket_collection
     struct epoll_event event_array[BMI_EPOLL_MAX_PER_CYCLE];
 
     int server_socket;
+    int server_port;
 };
 typedef struct socket_collection* socket_collection_p;
 

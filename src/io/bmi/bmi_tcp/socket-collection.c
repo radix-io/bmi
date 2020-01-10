@@ -54,6 +54,7 @@ socket_collection_p BMI_socket_collection_init(int new_server_socket)
     }
 
     memset(tmp_scp, 0, sizeof(struct socket_collection));
+    tmp_scp->server_port = -1;
 
     gen_mutex_init(&tmp_scp->queue_mutex);
 
@@ -93,6 +94,21 @@ socket_collection_p BMI_socket_collection_init(int new_server_socket)
 	tmp_scp->pollfd_array[tmp_scp->array_count].events = POLLIN;
 	tmp_scp->addr_array[tmp_scp->array_count] = NULL;
 	tmp_scp->array_count++;
+
+        /* determine what port the server socket is bound to, in case the
+         * port was auto-assigned
+         */
+        ret = getsockname(new_server_socket, (struct sockaddr *)&addr, &addr_len);
+        if(ret < 0)
+        {
+            /* shrug */
+            tmp_scp->server_port = 0;
+        }
+        else
+        {
+            tmp_scp->server_port = ntohs(addr.sin_port);
+        }
+
     }
 
     /* Add the pipe_fd[0] fd to the poll in set always */

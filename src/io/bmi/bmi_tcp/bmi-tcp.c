@@ -1014,7 +1014,12 @@ int BMI_tcp_get_info(int option,
         *((int *) inout_parameter) = TCP_MODE_EAGER_LIMIT;
         ret = 0;
         break;
-
+    case BMI_TCP_GET_PORT:
+        if(tcp_socket_collection_p)
+            *((int*)inout_parameter) = tcp_socket_collection_p->server_port;
+        else
+            *((int*)inout_parameter) = 0;
+        break;
     default:
 	gossip_ldebug(GOSSIP_BMI_DEBUG_TCP,
                       "TCP hint %d not implemented.\n", option);
@@ -1978,7 +1983,6 @@ static int tcp_server_init(void)
     /* bind it to the appropriate port */
     if(tcp_method_params.method_flags & BMI_TCP_BIND_SPECIFIC)
     {
-fprintf(stderr, "FOO: binding hostname %s, port %d\n", tcp_addr_data->hostname, tcp_addr_data->port);
         ret = BMI_sockio_bind_sock_specific(tcp_addr_data->socket,
             tcp_addr_data->hostname,
             tcp_addr_data->port);
