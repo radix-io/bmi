@@ -593,6 +593,7 @@ bmi_method_addr_p BMI_tcp_method_addr_lookup(const char *id_string)
     char *tcp_string = NULL;
     char *delim = NULL;
     char *hostname = NULL;
+    int hostname_len = 0;
     bmi_method_addr_p new_addr = NULL;
     struct tcp_addr *tcp_addr_data = NULL;
     int ret = -1;
@@ -608,12 +609,8 @@ bmi_method_addr_p BMI_tcp_method_addr_lookup(const char *id_string)
 
     /* start breaking up the method information */
     /* for normal tcp, it is simply hostname:port */
-    if ((delim = index(tcp_string, ':')) == NULL)
-    {
-        gossip_lerr("Error: malformed tcp address.\n");
-        free(tcp_string);
-        return (NULL);
-    }
+    /* NOTE: "delim" may be NULL if port not specified */
+    delim = index(tcp_string, ':');
 
     addr_hash = hashlittle(id_string, strlen(id_string), 3334);
     /* do we already have a connection established from this host? */
@@ -622,7 +619,7 @@ bmi_method_addr_p BMI_tcp_method_addr_lookup(const char *id_string)
     {
         /* we have already received an inbound connection from the host that
          * we are looking up.  Re-use the existing method addr rather than
-         * creating a new one 
+         * creating a new one
          */
         tcp_addr_data = qlist_entry(tmp_link, struct
             tcp_addr, hash_link);
@@ -645,27 +642,39 @@ bmi_method_addr_p BMI_tcp_method_addr_lookup(const char *id_string)
         tcp_addr_data = new_addr->method_data;
     }
 
-    ret = sscanf((delim + 1), "%d", &(tcp_addr_data->port));
-    if (ret != 1)
+    if(delim)
     {
-        gossip_lerr("Error: malformed tcp address.\n");
-        dealloc_tcp_method_addr(new_addr);
-        free(tcp_string);
-        return (NULL);
+        ret = sscanf((delim + 1), "%d", &(tcp_addr_data->port));
+        if (ret != 1)
+        {
+            gossip_lerr("Error: malformed tcp address.\n");
+            dealloc_tcp_method_addr(new_addr);
+            free(tcp_string);
+            return (NULL);
+        }
+    }
+    else
+    {
+        /* port not specified; attempt to auto-select */
+        tcp_addr_data->port = 0;
     }
 
-    hostname = (char *) malloc((delim - tcp_string + 1));
+    if(delim)
+        hostname_len = delim - tcp_string;
+    else
+        hostname_len = strlen(tcp_string);
+    hostname = (char *) malloc(hostname_len + 1);
     if (!hostname)
     {
         dealloc_tcp_method_addr(new_addr);
         free(tcp_string);
         return (NULL);
     }
-    strncpy(hostname, tcp_string, (delim - tcp_string));
-    hostname[delim - tcp_string] = '\0';
+    strncpy(hostname, tcp_string, hostname_len);
+    hostname[hostname_len] = '\0';
 
     tcp_addr_data->hostname = hostname;
-    tcp_addr_data->addr_hash = addr_hash; 
+    tcp_addr_data->addr_hash = addr_hash;
     /* add entry to hash table so we can find it later */
     if(addr_hash_table)
     {
@@ -1969,6 +1978,7 @@ static int tcp_server_init(void)
     /* bind it to the appropriate port */
     if(tcp_method_params.method_flags & BMI_TCP_BIND_SPECIFIC)
     {
+fprintf(stderr, "FOO: binding hostname %s, port %d\n", tcp_addr_data->hostname, tcp_addr_data->port);
         ret = BMI_sockio_bind_sock_specific(tcp_addr_data->socket,
             tcp_addr_data->hostname,
             tcp_addr_data->port);
