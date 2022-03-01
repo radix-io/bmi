@@ -11,7 +11,7 @@ AC_CONFIG_AUX_DIR(maint/config)
 
 dnl
 dnl for test builds, insert the build date and time information into
-dnl into the version; for official releases, clear the PVFS2_PRE line
+dnl into the version; for official releases, clear the PVFS2_VERSION_PRE line
 dnl
 dnl PVFS2 versioning information.  
 dnl An @ in the date string can confuse e.g. scp and 'make kmod'
@@ -19,8 +19,8 @@ CONFIGURE_TIME=`date -u +"%Y-%m-%d-%H%M%S"`
 PVFS2_VERSION_MAJOR=2
 PVFS2_VERSION_MINOR=8
 PVFS2_VERSION_SUB=1
-#PVFS2_PRE=""
-PVFS2_VERSION_PRE="pre1-$CONFIGURE_TIME"
+#PVFS2_VERSION_PRE="pre1-$CONFIGURE_TIME"
+PVFS2_VERSION_PRE=""
 
 PVFS2_VERSION=$PVFS2_VERSION_MAJOR.$PVFS2_VERSION_MINOR.$PVFS2_VERSION_SUB$PVFS2_VERSION_PRE
 AC_SUBST(PVFS2_VERSION)
