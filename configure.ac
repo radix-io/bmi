@@ -812,19 +812,20 @@ AC_ARG_WITH(valgrind,
     save_cppflags="$CPPFLAGS"
     AC_MSG_CHECKING(for valgrind.h usability)
     if test "x$withval" = xyes ; then
-	AC_COMPILE_IFELSE([#include <valgrind.h>], found=yes)
+	AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <valgrind.h>]])],
+                          found=yes)
 	if test x$found = xno ; then
 	    CPPFLAGS="$CPPFLAGS -I/usr/include/valgrind"
-	    AC_COMPILE_IFELSE([#include <valgrind.h>], found=yes,
-		CPPFLAGS="$save_cppflags")
+	    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <valgrind.h>]])],
+                              found=yes, CPPFLAGS="$save_cppflags")
 	fi
     else
 	for d in $withval $withval/include \
 	         $withval/valgrind $withval/include/valgrind
 	do
 	    CPPFLAGS="$CPPFLAGS -I$d"
-	    AC_COMPILE_IFELSE([#include <valgrind.h>], found=yes,
-		CPPFLAGS="$save_cppflags")
+	    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <valgrind.h>]])],
+                found=yes, CPPFLAGS="$save_cppflags")
 	    if test x$found = xyes ; then
 		break
 	    fi
