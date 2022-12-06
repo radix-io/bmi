@@ -70,21 +70,7 @@ INSTALL = @INSTALL@
 BISON = bison
 FLEX = flex
 LN_S = ln -snf
-BUILD_BMI_TCP = @BUILD_BMI_TCP@
-BUILD_BMI_ONLY = @BUILD_BMI_ONLY@
-BUILD_GM = @BUILD_GM@
-BUILD_MX = @BUILD_MX@
-BUILD_IB = @BUILD_IB@
-BUILD_OPENIB = @BUILD_OPENIB@
-BUILD_PORTALS = @BUILD_PORTALS@
-BUILD_ZOID = @BUILD_ZOID@
-BUILD_VIS = @BUILD_VIS@
-BUILD_KARMA = @BUILD_KARMA@
-BUILD_FUSE = @BUILD_FUSE@
-BUILD_SERVER = @BUILD_SERVER@
 BUILD_TAU = @BUILD_TAU@
-BUILD_KERNEL = @BUILD_KERNEL@
-NEEDS_LIBRT = @NEEDS_LIBRT@
 TARGET_OS_DARWIN = @TARGET_OS_DARWIN@
 TARGET_OS_LINUX = @TARGET_OS_LINUX@
 GNUC = @GNUC@
@@ -96,8 +82,6 @@ QUIET_COMPILE = @QUIET_COMPILE@
 ifdef V
     QUIET_COMPILE = 0
 endif
-LINUX_KERNEL_SRC = @LINUX_KERNEL_SRC@
-LINUX24_KERNEL_SRC = @LINUX24_KERNEL_SRC@
 
 ifeq ($(QUIET_COMPILE),1)
   # say a one-line description of the action, do not echo the command
@@ -131,8 +115,6 @@ build_static = @build_static@
 MODULES := $(shell find . -name "*.mk" | sed -e 's/^.\///;s/module.mk//')
 
 # List of directories to search for headers.
-ifdef BUILD_BMI_ONLY
-BUILD_SERVER=""
 INCLUDES := \
 	include \
     src/io/bmi \
@@ -145,27 +127,6 @@ INCLUDES := \
     src/common/events
 GENINCLUDES := \
 	include
-else
-INCLUDES := \
-    src/client/sysint \
-    src/common/misc \
-    src/common/quickhash \
-    src/common/quicklist \
-    src/common/id-generator \
-    src/common/gossip \
-    src/common/gen-locks \
-    src/common/events \
-    src/io/trove \
-    src/io/bmi \
-    src/io/description \
-    src/io/buffer \
-    src/io/job \
-    src/io/dev \
-    src/proto \
-    src/common/mgmt
-GENINCLUDES := \
-	include
-endif
 
 #################################################################
 # Setup global flags
@@ -184,17 +145,13 @@ LDFLAGS = -L@BUILD_ABSOLUTE_TOP@/lib
 LDFLAGS += @LDFLAGS@
 SERVER_LDFLAGS = -L@BUILD_ABSOLUTE_TOP@/lib
 SERVER_LDFLAGS += @SERVER_LDFLAGS@
-DB_CFLAGS = @DB_CFLAGS@
 LDSHARED = $(CC) -shared
 PICFLAGS = -fPIC
 LIBS += -lpvfs2 @LIBS@ 
 LIBS_THREADED += -lpvfs2-threaded @LIBS@
 # need to include external dependency libs when building shared libraries
 DEPLIBS := @LIBS@
-MMAP_RA_CACHE = @MMAP_RA_CACHE@
 TRUSTED_CONNECTIONS = @TRUSTED_CONNECTIONS@
-REDHAT_RELEASE = @REDHAT_RELEASE@
-NPTL_WORKAROUND = @NPTL_WORKAROUND@
 STRICT_CFLAGS = @STRICT_CFLAGS@
 SO_VER = @PVFS2_VERSION_MAJOR@
 SO_MINOR = @PVFS2_VERSION_MINOR@
@@ -306,17 +263,13 @@ endif
 #SERVERCFLAGS = -D__GEN_POSIX_LOCKING__ -D__PVFS2_TROVE_SUPPORT__
 
 SERVERCFLAGS = @CFLAGS@ -D__GEN_POSIX_LOCKING__ -D__PVFS2_JOB_THREADED__ \
--D__PVFS2_TROVE_THREADED__ @MISC_TROVE_FLAGS@ @DB_CFLAGS@ \
+-D__PVFS2_TROVE_THREADED__ @MISC_TROVE_FLAGS@ \
 -D__PVFS2_TROVE_SUPPORT__ -D__PVFS2_SERVER__
 
 # server side flow protocol connecting BMI with NCAC cache
 SERVERCFLAGS += -D__STATIC_FLOWPROTO_BMI_CACHE__
 
-SERVERLIBS = -lpvfs2-server @LIBS@ @DB_LIB@ -lpthread 
-
-ifdef NEEDS_LIBRT 
-	SERVERLIBS += -lrt
-endif
+SERVERLIBS = -lpvfs2-server @LIBS@ -lpthread 
 
 # you can optionally disable thread safety support in the client
 # though it's not recommended unless *required*.
@@ -329,93 +282,13 @@ DEPLIBS += @THREAD_LIB@
 LIBS_THREADED += @THREAD_LIB@
 
 ################################################################
-# build BMI TCP?
-
-ifdef BUILD_BMI_TCP
+# build BMI TCP!
 	CFLAGS += -D__STATIC_METHOD_BMI_TCP__
-endif
 
-
-################################################################
-# enable GM if configure detected it
-
-ifdef BUILD_GM
-    # other settings in bmi_gm/module.mk.in
-    CFLAGS += -D__STATIC_METHOD_BMI_GM__
-    GMLIBS := -L@GM_LIBDIR@ -lgm
-    LIBS += $(GMLIBS)
-    DEPLIBS += $(GMLIBS)
-    LIBS_THREADED += $(GMLIBS)
-    SERVERLIBS += $(GMLIBS)
-endif
-
-################################################################
-# enable MX if configure detected it
-
-ifdef BUILD_MX
-    # other settings in bmi_mx/module.mk.in
-    CFLAGS += -D__STATIC_METHOD_BMI_MX__
-    MXLIBS := -L@MX_LIBDIR@ -lmyriexpress -lpthread
-    LIBS += $(MXLIBS)
-    DEPLIBS += $(MXLIBS)
-    LIBS_THREADED += $(MXLIBS)
-    SERVERLIBS += $(MXLIBS)
-endif
-
-#####################################
-# enable IB if configure requested it
-
-ifdef BUILD_IB
-    # other settings in bmi_ib/module.mk.in
-    CFLAGS += -D__STATIC_METHOD_BMI_IB__
-    IBLIBS := -L@IB_LIBDIR@ \
-	      -lvapi -lmtl_common -lmosal -lmpga -lpthread -ldl
-    LIBS += $(IBLIBS)
-    DEPLIBS += $(IBLIBS)
-    LIBS_THREADED += $(IBLIBS)
-    SERVERLIBS += $(IBLIBS)
-endif
-
-ifdef BUILD_OPENIB
-ifndef BUILD_IB
-    CFLAGS += -D__STATIC_METHOD_BMI_IB__
-endif
-    OPENIBLIBS := -L@OPENIB_LIBDIR@ -libverbs
-    LIBS += $(OPENIBLIBS)
-    DEPLIBS += $(OPENIBLIBS)
-    LIBS_THREADED += $(OPENIBLIBS)
-    SERVERLIBS += $(OPENIBLIBS)
-endif
-
-# Portals
-ifdef BUILD_PORTALS
-    CFLAGS += -D__STATIC_METHOD_BMI_PORTALS__
-ifneq (,@PORTALS_LIBS@)
-    PORTALS_LIBS := @PORTALS_LIBS@
-    LIBS += $(PORTALS_LIBS)
-    DEPLIBS += $(PORTALS_LIBS)
-    LIBS_THREADED += $(PORTALS_LIBS)
-    SERVERLIBS += $(PORTALS_LIBS)
-endif
-endif
-
-ifdef BUILD_ZOID
-    CFLAGS += -D__STATIC_METHOD_BMI_ZOID__
-endif
-
-# enable mmap-readahead cache (unless disabled by configure)
-ifdef MMAP_RA_CACHE
-CFLAGS += @MMAP_RA_CACHE@
-endif
 
 # enable trusted connections (unless disabled by configure)
 ifdef TRUSTED_CONNECTIONS
 CFLAGS += @TRUSTED_CONNECTIONS@
-endif
-
-# enable redhat-release patches (if detected and if any)
-ifdef REDHAT_RELEASE
-CFLAGS += @REDHAT_RELEASE@
 endif
 
 # Add gcc-specific flags if we know it is a gnu compiler.
@@ -443,10 +316,8 @@ ADMINSRC_SERVER :=
 LIBSRC :=
 # SERVERSRC is souce code for the pvfs2 server
 SERVERSRC :=
-ifdef BUILD_BMI_ONLY
 # LIBBMISRC is source code for libbmi
 LIBBMISRC :=
-endif
 # SERVERBINSRC is source files that don't get added to the server library but must be added to the server binary
 SERVERBINSRC :=
 # DOCSRC is source code for documentation
@@ -471,34 +342,19 @@ SMCGEN :=
 ################################################################
 # Top level (default) targets
 
-ifdef BUILD_SERVER
-# SERVER_STUB is a wrapper script that export the LD_ASSUME_KERNEL variable for
-#    systems with buggy NPTL/Pthread implementations, such as early RedHat
-#    EL 3 distributions
-SERVER_STUB := src/server/pvfs2-server-stub
-# SERVER is the pvfs2 server
-SERVER := src/server/pvfs2-server
-endif
-
 # LIBRARIES is a list of the pvfs2 client libraries that will be installed
 LIBRARIES :=
-ifdef BUILD_BMI_ONLY
 BMILIBRARIES :=
-endif
 LIBRARIES_THREADED :=
 ifeq ($(build_shared),yes)
-ifdef BUILD_BMI_ONLY
 BMILIBRARIES := lib/libbmi.so
-endif
 LIBRARIES_SHARED = lib/libpvfs2.so
 LIBRARIES += $(LIBRARIES_SHARED)
 LIBRARIES_THREADED_SHARED += lib/libpvfs2-threaded.so
 LIBRARIES_THREADED += $(LIBRARIES_THREADED_SHARED)
 endif
 ifeq ($(build_static),yes)
-ifdef BUILD_BMI_ONLY
 BMILIBRARIES += lib/libbmi.a
-endif
 LIBRARIES_STATIC = lib/libpvfs2.a
 LIBRARIES += $(LIBRARIES_STATIC)
 LIBRARIES_THREADED_STATIC += lib/libpvfs2-threaded.a
@@ -532,14 +388,12 @@ LIBPICOBJS := $(patsubst %.c,%.po, $(filter %.c,$(LIBSRC)))
 # LIBDEPENDS is a list of dependency files for the client lib
 LIBDEPENDS := $(patsubst %.c,%.d, $(filter %.c,$(LIBSRC)))
 
-ifdef BUILD_BMI_ONLY
 # LIBBMIOBJS is a list of objects to put in the bmi lib
 LIBBMIOBJS := $(patsubst %.c,%.o, $(filter %.c,$(LIBBMISRC)))
 # LIBBMIPICOBJS are the same, but compiled for use in a shared library
 LIBBMIPICOBJS := $(patsubst %.c,%.po, $(filter %.c,$(LIBBMISRC)))
 # LIBBMIDEPENDS is a list of dependency files for the bmi lib
 LIBBMIDEPENDS := $(patsubst %.c,%.d, $(filter %.c,$(LIBBMISRC)))
-endif
 
 # LIBTHREADEDOBJS is a list of objects to put in the multithreaded client lib
 LIBTHREADEDOBJS := $(patsubst %.c,%-threaded.o, $(filter %.c,$(LIBSRC)))
@@ -553,19 +407,6 @@ ADMINOBJS := $(patsubst %.c,%.o, $(filter %.c,$(ADMINSRC)))
 ADMINTOOLS := $(patsubst %.c,%, $(filter %.c, $(ADMINSRC)))
 # ADMINDEPENDS is a list of dependency files for admin programs
 ADMINDEPENDS := $(patsubst %.c,%.d, $(filter %.c,$(ADMINSRC)))
-
-ifdef BUILD_SERVER
-    ADMINOBJS_SERVER := $(patsubst %.c,%.o, $(filter %.c,$(ADMINSRC_SERVER)))
-    ADMINTOOLS_SERVER := $(patsubst %.c,%, $(filter %.c, $(ADMINSRC_SERVER)))
-    ADMINDEPENDS_SERVER := $(patsubst %.c,%.d, $(filter %.c,$(ADMINSRC_SERVER)))
-    # SERVEROBJS is a list of objects to put into the server
-    SERVEROBJS := $(patsubst %.c,%-server.o, $(filter %.c,$(SERVERSRC)))
-    # SERVERDEPENDS is a list of dependency files for the server
-    SERVERDEPENDS := $(patsubst %.c,%.d, $(filter %.c,$(SERVERSRC)))
-    # SERVERBINOBJS is a list of objects not in SERVEROBJS to put into the server
-    SERVERBINOBJS := $(patsubst %.c,%-server.o, $(filter %.c,$(SERVERBINSRC)))
-    SERVERBINDEPENDS := $(patsubst %.c,%.d, $(filter %.c,$(SERVERBINSRC)))
-endif
 
 # MISCOBJS is a list of misc. objects not in the above categories
 MISCOBJS := $(patsubst %.c,%.o, $(filter %.c,$(MISCSRC)))
@@ -628,24 +469,13 @@ DOCSCRUFT += $(patsubst %.tex,%.toc, $(filter %.tex,$(DOCSRC)))
 # DEPENDS is a global list of all of our dependency files.  
 # NOTE: sort is just a trick to remove duplicates; the order
 #   doesn't matter at all.
-ifdef BUILD_BMI_ONLY
 DEPENDS := $(sort $(LIBBMIDEPENDS))
-else
-DEPENDS := $(sort $(LIBDEPENDS) $(SERVERDEPENDS) $(SERVERBINDEPENDS) \
-    $(MISCDEPENDS) \
-    $(ADMINDEPENDS) $(ADMINDEPENDS_SERVER) $(KERNAPPDEPENDS) $(VISDEPENDS) \
-    $(VISMISCDEPENDS) $(KARMADEPENDS) $(STATECOMPDEPS) $(FUSEDEPENDS))
-endif
 
 ####################################################################
 # Rules and dependencies
 
 # default rule builds server, library, and applications
-ifdef BUILD_BMI_ONLY
 all:: $(BMILIBRARIES)
-else
-all:: $(SERVER) $(KARMA) $(LIBRARIES) admintools $(VISS) $(KARMA) $(FUSE)
-endif
 
 # target for building admin tools
 admintools: $(ADMINTOOLS) $(ADMINTOOLS_SERVER)
@@ -655,24 +485,6 @@ kernapps: $(KERNAPPS) $(KERNAPPSTHR)
 
 # this is needed for the make dist
 statecompgen: $(STATECOMPGEN)
-
-# Build linux-2.6 kernel module if requested.
-# Can't use the actual file target since we don't know how to figure out
-# dependencies---only the kernel source tree can do that.
-ifneq (,$(LINUX_KERNEL_SRC))
-.PHONY: kmod
-kmod: just_kmod kernapps
-just_kmod:
-	@$(MAKE) --no-print-directory -C src/kernel/linux-2.6
-endif
-
-# Build linux-2.4 kernel module if requested.
-ifneq (,$(LINUX24_KERNEL_SRC))
-.PHONY: kmod24
-kmod24: just_kmod24 kernapps
-just_kmod24: 
-	@$(MAKE) --no-print-directory -C src/kernel/linux-2.4
-endif
 
 # Just like dir, but strip the slash off the end, to be pretty.
 dirname = $(patsubst %/,%,$(dir $(1)))
@@ -709,7 +521,6 @@ $(ADMINTOOLS_SERVER): %: %.o
 	$(Q) "  LD		$@"
 	$(E)$(LD) $< $(LDFLAGS) $(SERVER_LDFLAGS) $(SERVERLIBS) -o $@
 
-ifdef BUILD_BMI_ONLY
 # rule for building the bmi library
 lib/libbmi.a: $(LIBBMIOBJS)
 	$(Q) "  RANLIB	$@"
@@ -721,7 +532,6 @@ lib/libbmi.so: $(LIBBMIPICOBJS)
 	$(Q) "  LDSO		$@"
 	$(E)$(INSTALL) -d lib
 	$(E)$(LDSHARED) -Wl,-soname,libbmi.so -o $@ $(LIBBMIPICOBJS) $(DEPLIBS)
-endif
 
 # rule for building the pvfs2 library
 lib/libpvfs2.a: $(LIBOBJS)
@@ -929,26 +739,14 @@ ifndef DIST_RELEASE
 	$(E)rm -f $(STATECOMPGEN) 
 endif
 
-ifneq (,$(LINUX_KERNEL_SRC))
-clean::
-	@$(MAKE) --no-print-directory -C src/kernel/linux-2.6 clean
-endif
-
-ifneq (,$(LINUX24_KERNEL_SRC))
-clean::
-	@$(MAKE) --no-print-directory -C src/kernel/linux-2.4 clean
-endif
-
 # builds a tarball of the source tree suitable for distribution
 dist: $(SMCGEN) cleaner
 	@sh $(srcdir)/maint/make-dist.sh $(srcdir) @PVFS2_VERSION@
 
-ifdef BUILD_BMI_ONLY
 # builds a tarball of the BMI source tree suitable for distribution
 bmidist: cleaner
 	@sh $(srcdir)/maint/make-bmi-dist.sh $(srcdir) $(builddir) @PVFS2_VERSION@
 	cp -u $(builddir)/config.save $(builddir)/config.status
-endif
 
 # some stuff that is cleaned in both distclean and dist targets
 cleaner: clean
@@ -991,7 +789,7 @@ nodep:; @:
 # default rule for generating dependency files
 %.d: %.c
 	$(Q) "  DEP		$@"
-	$(E)CC="$(CC)" $(srcdir)/maint/depend.sh $(call dirname,$*) $(CFLAGS) $(DB_CFLAGS) $(call modcflags,$<) $< > $@
+	$(E)CC="$(CC)" $(srcdir)/maint/depend.sh $(call dirname,$*) $(CFLAGS) $(call modcflags,$<) $< > $@
 
 # default rules for building documents in .tex format:
 # TODO: these documentation rules are a big hack!
@@ -1023,25 +821,12 @@ src/server/simple.conf: src/apps/admin/pvfs2-genconfig
  --storage /tmp/pvfs2-test-space --logging "server,network,storage,flow" \
  --quiet src/server/simple.conf
 
-# whether this is a distribution tarball or not, drop some config files
-# into the "examples" subdir of the build dir
-ifndef BUILD_BMI_ONLY
-all:: examples/fs.conf
-examples/fs.conf: src/apps/admin/pvfs2-genconfig
-	$(Q) "  GENCONFIG     $@"
-	$(E)$(srcdir)/src/apps/admin/pvfs2-genconfig --protocol tcp --port 3334 \
- --ioservers localhost --metaservers localhost --logfile /tmp/pvfs2-server.log \
- --storage /tmp/pvfs2-test-space \
- --quiet examples/fs.conf
-endif
-
 install_doc:
 	install -d $(mandir)/man1
 	install -d $(mandir)/man5
 	install -m 644 $(srcdir)/doc/man/*.1 $(mandir)/man1
 	install -m 644 $(srcdir)/doc/man/*.5 $(mandir)/man5
 
-ifdef BUILD_BMI_ONLY
 install:: all
 	install -d $(includedir)
 	install -m 644 $(srcdir)/src/io/bmi/bmi.h $(includedir)
@@ -1049,128 +834,4 @@ install:: all
 
 	install -d $(libdir)
 	install -m 755 lib/*.* $(libdir)
-else
-install:: all install_doc
-	install -d $(includedir)
-	install -m 644 $(builddir)/include/pvfs2.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-request.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-debug.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-sysint.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-mgmt.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-types.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-util.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-encode-stubs.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-hint.h $(includedir)
-	install -m 644 $(srcdir)/include/pvfs2-compat.h $(includedir)
 
-	install -d $(libdir)
-ifneq (,$(LIBRARIES_STATIC))
-	for i in $(notdir $(LIBRARIES_STATIC)) ; do \
-	    install -m 755 lib/$$i $(libdir) ;\
-	done
-ifneq (,$(KERNAPPSTHR))
-	for i in $(notdir $(LIBRARIES_THREADED_STATIC)) ; do \
-	    install -m 755 lib/$$i $(libdir) ;\
-	done
-endif
-endif
-ifneq (,$(LIBRARIES_SHARED))
-	for i in $(notdir $(LIBRARIES_SHARED)) ; do \
-	    install -m 755 lib/$$i $(libdir)/$$i.$(SO_FULLVER) ;\
-	    $(LN_S) $$i.$(SO_FULLVER) $(libdir)/$$i.$(SO_VER) ;\
-	    $(LN_S) $$i.$(SO_VER) $(libdir)/$$i ;\
-	done
-ifneq (,$(KERNAPPSTHR))
-	for i in $(notdir $(LIBRARIES_THREADED_SHARED)) ; do \
-	    install -m 755 lib/$$i $(libdir)/$$i.$(SO_FULLVER) ;\
-	    $(LN_S) $$i.$(SO_FULLVER) $(libdir)/$$i.$(SO_VER) ;\
-	   $(LN_S) $$i.$(SO_VER) $(libdir)/$$i ;\
-	done
-endif
-endif
-
-ifdef TARGET_OS_DARWIN
-#       TOC needs to be regenerated in libs after they get moved
-	ranlib $(patsubst %,$(prefix)/%,$(LIBRARIES))
-endif
-
-	install -d $(bindir)
-	install -m 755 $(ADMINTOOLS) $(bindir)
-	# for compatibility in case anyone really wants "lsplus"
-	$(LN_S) pvfs2-ls $(bindir)/pvfs2-lsplus
-	install -m 755 src/apps/admin/pvfs2-config $(bindir)
-	@# if we ever auto-generate genconfig, remove the $(srcdir)
-	install -m 755 $(srcdir)/src/apps/admin/pvfs2-genconfig $(bindir)
-	install -m 755 $(srcdir)/src/apps/admin/pvfs2-config-convert $(bindir)
-ifdef BUILD_KARMA
-	install -m 755 $(KARMA) $(bindir)
-endif
-
-ifdef BUILD_FUSE
-	install -m 755 $(FUSE) $(prefix)/bin
-endif
-
-	install -d $(sbindir)
-
-ifdef BUILD_SERVER
-	install -m 755 $(ADMINTOOLS_SERVER) $(bindir)
-    ifeq ($(NPTL_WORKAROUND),)
-	install -m 755 $(SERVER) $(sbindir)
-    else
-	install -m 755 $(srcdir)/$(SERVER_STUB) $(sbindir)/pvfs2-server
-	install -m 755 $(SERVER) $(sbindir)/pvfs2-server.bin
-    endif
-endif
-endif
-
-ifneq (,$(LINUX_KERNEL_SRC))
-
-NUM_UTS_LINES := $(shell grep -c UTS_RELEASE $(LINUX_KERNEL_SRC)/include/linux/version.h)
-ifeq ($(NUM_UTS_LINES),1)
-    KERNEL_VERS := $(shell grep UTS_RELEASE $(LINUX_KERNEL_SRC)/include/linux/version.h | cut -d\" -f2)
-else
-     NUM_UTS_LINES := $(shell grep -c UTS_RELEASE $(LINUX_KERNEL_SRC)/include/linux/utsrelease.h)
-     ifeq ($(NUM_UTS_LINES),1)
-         KERNEL_VERS := $(shell grep UTS_RELEASE $(LINUX_KERNEL_SRC)/include/linux/utsrelease.h | cut -d\" -f2)
-     else
-         KERNEL_VERS := $(shell uname -r)
-     endif
-endif
-KMOD_DIR ?= $(DESTDIR)/${kmod_prefix}/lib/modules/$(KERNEL_VERS)/kernel/fs/pvfs2
-
-.PHONY: just_kmod_install
-just_kmod_install: just_kmod
-	install -d $(KMOD_DIR)
-	install -m 755 src/kernel/linux-2.6/pvfs2.ko $(KMOD_DIR)
-
-.PHONY: kmod_install
-kmod_install: kmod kernapps just_kmod_install
-	install -d $(sbindir)
-	install -m 755 $(KERNAPPS) $(KERNAPPSTHR) $(sbindir)
-endif
-
-ifneq (,$(LINUX24_KERNEL_SRC))
-
-NUM_UTS_LINES := $(shell grep -c UTS_RELEASE $(LINUX24_KERNEL_SRC)/include/linux/version.h)
-ifeq ($(NUM_UTS_LINES),1)
-    KERNEL_VERS := $(shell grep UTS_RELEASE $(LINUX24_KERNEL_SRC)/include/linux/version.h | cut -d\" -f2)
-else
-    KERNEL_VERS := $(shell uname -r)
-endif
-KMOD_DIR := $(DESTDIR)/lib/modules/$(KERNEL_VERS)/kernel/fs/pvfs2
-
-.PHONY: just_kmod24_install
-just_kmod24_install: just_kmod24
-	install -d $(KMOD_DIR)
-	install -m 755 src/kernel/linux-2.4/pvfs2.o $(KMOD_DIR)
-
-.PHONY: kmod24_install
-kmod24_install: kmod24 kernapps just_kmod24_install
-	install -d $(sbindir)
-	install -m 755 $(KERNAPPS) $(KERNAPPSTHR) $(sbindir)
-	install -m 755 src/apps/kernel/linux/mount.pvfs2 $(sbindir)
-	@echo ""
-	@echo "For improved linux-2.4 support,"
-	@echo "install $(sbindir)/mount.pvfs2 to /sbin/mount.pvfs2"
-	@echo ""
-endif
