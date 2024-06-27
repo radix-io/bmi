@@ -209,7 +209,9 @@ test_for_epoll()
 {
   AC_CHECK_HEADERS(sys/epoll.h)
   AC_MSG_CHECKING(for epoll functions)
-  AC_TRY_LINK([#include <sys/epoll.h>], [
+  AC_TRY_LINK([#include <sys/epoll.h>
+               #include <unistd.h>],
+  [
 	int fd;
 	fd = epoll_create(1);
 	close(fd);
