@@ -208,6 +208,7 @@ struct tcp_op
 static struct iovec stat_io_vector[BMI_TCP_IOV_COUNT+1];
 
 /* internal utility functions */
+static int tcp_server_update_listen_hash(struct tcp_addr *taddr);
 static int tcp_server_init(void);
 static void dealloc_tcp_method_addr(bmi_method_addr_p map);
 static int tcp_sock_init(bmi_method_addr_p my_method_addr);
@@ -1946,12 +1947,62 @@ bmi_method_addr_p alloc_tcp_method_addr(void)
 
 
 /*
+ * tcp_server_update_listen_hash()
+ *
+ * this function regenerates the listen_addr's addr_hash value.
+ * we use it when the port number is zero or not specified in the
+ * listen_addr string.  without port information, the hash
+ * of the listen_addr string will have duplicate conflicting
+ * addr_hash values if we run more than one server on the same machine.
+ * to avoid this we use getsockname() to read the unique port number
+ * selected by the kernel to generate a new listen_addr string
+ * that we can hash into a value that should be completely unique.
+ *
+ * returns 0 on success, -errno on failure
+ */
+static int tcp_server_update_listen_hash(struct tcp_addr *taddr)
+{
+    socklen_t socklen;
+    struct sockaddr_in sin;
+    int ret, tmp_errno, lbufsz;
+    char *listen_addr = NULL;
+
+    socklen = sizeof(sin);
+    ret = getsockname(taddr->socket, (struct sockaddr *) &sin, &socklen);
+    if (ret < 0)
+    {
+        tmp_errno = errno;
+	gossip_err("Error: tcp_server_update_listen_hash: getsockname: %s\n",
+                   strerror(tmp_errno));
+        return (bmi_tcp_errno_to_pvfs(-tmp_errno));
+    }
+
+    lbufsz = (sizeof("tcp://") - 1) + strlen(taddr->hostname) + 16;
+    listen_addr = malloc(lbufsz);
+    if (!listen_addr)
+    {
+	gossip_err("Error: tcp_server_update_listen_hash: malloc failed\n");
+	return (bmi_tcp_errno_to_pvfs(-ENOMEM));
+    }
+
+    snprintf(listen_addr, lbufsz, "tcp://%s:%d", taddr->hostname,
+             ntohs(sin.sin_port));
+    taddr->addr_hash = hashlittle(listen_addr, strlen(listen_addr), 3334);
+    gossip_debug(GOSSIP_BMI_DEBUG_TCP,
+        "Updated hashed BMI address %s to %u (added port#)\n", listen_addr,
+        taddr->addr_hash);
+    free(listen_addr);
+    return (0);
+}
+
+
+/*
  * tcp_server_init()
  *
  * this function is used to prepare a node to recieve incoming
  * connections if it is initialized in a server configuration.   
  *
- * returns 0 on succes, -errno on failure
+ * returns 0 on success, -errno on failure
  */
 static int tcp_server_init(void)
 {
@@ -2004,6 +2055,16 @@ static int tcp_server_init(void)
 	tmp_errno = errno;
 	gossip_err("Error: BMI_sockio_bind_sock: %s\n", strerror(tmp_errno));
 	return (bmi_tcp_errno_to_pvfs(-tmp_errno));
+    }
+
+    /* fix server hash if port==0 */
+    if (tcp_addr_data->port == 0)
+    {
+        ret = tcp_server_update_listen_hash(tcp_addr_data);
+        if (ret != 0)
+        {
+            return(ret);
+        }
     }
 
     /* go ahead and listen to the socket */
